@@ -85,7 +85,9 @@ class Hmm(object):
         self.emission_counts = defaultdict(int)
         self.ngram_counts = [defaultdict(int) for i in xrange(self.n)]
         self.all_states = set()
-
+        self.emission = defaultdict(int)
+        self.ngram2 = defaultdict(int)
+        
     def train(self, corpus_file):
         """
         Count n-gram frequencies and emission probabilities from a corpus file.
@@ -147,8 +149,6 @@ class Hmm(object):
                 self.ngram_counts[n-1][ngram] = count
 
     def processing(self):
-        self.emission = defaultdict(int)
-        self.ngram2 = defaultdict(int)
         for w in self.emission_counts:
             self.emission[w] = self.emission_counts[w]/self.ngram_counts[0][(w[1],)]
         # calculate q(s|u,v) = c(u,v,s)/c(u,v)
