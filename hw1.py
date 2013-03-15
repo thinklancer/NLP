@@ -47,6 +47,12 @@ def viterbi(str,model):
     print str
     print state[::-1]
             
+def buildRare(trainfile,countfile):
+    model = hmm.Hmm(3)
+    model.read_counts_from_file('gene.counts')
+    rareword = set()
+    for w in model.emission_counts:
+        
 
 def qz6():
     # Initialize

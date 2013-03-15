@@ -129,7 +129,6 @@ class Hmm(object):
                 output.write("%i %i-GRAM %s\n" %(self.ngram_counts[n-1][ngram], n, ngramstr))
 
     def read_counts(self, corpusfile):
-
         self.n = 3
         self.emission_counts = defaultdict(int)
         self.ngram_counts = [defaultdict(int) for i in xrange(self.n)]
@@ -149,6 +148,8 @@ class Hmm(object):
                 self.ngram_counts[n-1][ngram] = count
 
     def processing(self):
+        ''' calculate emission etc based on counters
+        '''
         for w in self.emission_counts:
             self.emission[w] = self.emission_counts[w]/self.ngram_counts[0][(w[1],)]
         # calculate q(s|u,v) = c(u,v,s)/c(u,v)
@@ -156,8 +157,11 @@ class Hmm(object):
             self.ngram2[w] = self.ngram_counts[2][w]/self.ngram_counts[1][w[:2]]
 
     def read_counts_from_file(self,file):
+        ''' read counts from file name instead of file pointer
+        '''
         with open(file,'r') as f:
             self.read_counts(f)
+
 
 if __name__ == "__main__":
     print "HMM model file"
