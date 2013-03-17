@@ -6,6 +6,7 @@ __date__ ="$Sep 12, 2011"
 import sys
 from collections import defaultdict
 import math
+import re
 
 """
 Count n-gram frequencies in a data file and write counts to
@@ -73,6 +74,66 @@ def get_ngrams(sent_iterator, n):
          for n_gram in ngrams: #Return one n-gram at a time
             yield n_gram        
 
+def tagRare(corpus_file):
+    ''' tag rare word with count < 5
+        output to the *file*.rare
+
+    :param corpus_file: input file
+    '''
+    file = corpus_file.split('.')[0]+'.rare'
+    counts = defaultdict(int)
+    with open(corpus_file,'r') as f:
+        line_iterator = simple_conll_corpus_iterator(f)
+        for l in line_iterator:
+            counts[l[0]] += 1
+
+    with open(corpus_file,'r') as f:
+        line_iterator = simple_conll_corpus_iterator(f)
+        g = open(file,'w')
+        for w,t in line_iterator:
+            if (w,t) == (None,None):
+                g.write("\n")
+            else:
+                if counts[w] < 5:
+                    g.write('_RARE_ '+t+'\n')
+                else:
+                    g.write(w+' '+t+'\n')
+        g.close()
+    
+def tagClass(corpus_file):
+    ''' tag rare word with count < 5
+        output to the *file*.rare
+
+    :param corpus_file: input file
+    '''
+    file = corpus_file.split('.')[0]+'.rare2'
+    counts = defaultdict(int)
+    with open(corpus_file,'r') as f:
+        line_iterator = simple_conll_corpus_iterator(f)
+        for l in line_iterator:
+            counts[l[0]] += 1
+
+    with open(corpus_file,'r') as f:
+        line_iterator = simple_conll_corpus_iterator(f)
+        g = open(file,'w')
+        for w,t in line_iterator:
+            if (w,t) == (None,None):
+                g.write("\n")
+            else:
+                if counts[w] < 5:
+                    if bool(re.search('[0-9]',w)):
+                        g.write('_Numeric_ '+t+'\n')
+                    else:
+                        if bool(re.match("^[a-zA-Z]*$",w)) and w.upper() == w:
+                            g.write('_AllCaptials_ '+t+'\n')
+                        else:
+                            if bool(re.match("^[a-zA-Z]*$",w)) and w[-1].upper() == w[-1]:
+                                g.write('_LastCapital_ '+t+'\n')
+                            else:
+                                g.write('_RARE_ '+t+'\n')
+                else:
+                    g.write(w+' '+t+'\n')
+        g.close()
 
 class Hmm(object):
     """
@@ -87,6 +148,7 @@ class Hmm(object):
         self.all_states = set()
         self.emission = defaultdict(int)
         self.ngram2 = defaultdict(int)
+        self.words = set()
         
     def train(self, corpus_file):
         """
@@ -133,6 +195,7 @@ class Hmm(object):
         self.emission_counts = defaultdict(int)
         self.ngram_counts = [defaultdict(int) for i in xrange(self.n)]
         self.all_states = set()
+        self.words = set()
 
         for line in corpusfile:
             parts = line.strip().split(" ")
@@ -142,6 +205,7 @@ class Hmm(object):
                 word = parts[3]
                 self.emission_counts[(word, ne_tag)] = count
                 self.all_states.add(ne_tag)
+                self.words.add(word)
             elif parts[1].endswith("GRAM"):
                 n = int(parts[1].replace("-GRAM",""))
                 ngram = tuple(parts[2:])
@@ -161,6 +225,111 @@ class Hmm(object):
         '''
         with open(file,'r') as f:
             self.read_counts(f)
+
+def viterbi(str,model):
+    ''' Viterbi Algorithm with Backpointer
+    '''
+    # initialize
+    boost = 4. # boost factor to avoid precision with tiny likelihood
+    n = len(str)
+    #print ' '.join(str)
+    pi = defaultdict(int)
+    bp = defaultdict(int)
+    pi[(0,'*','*')] = 1
+    state = []
+    # Algorithm
+    fullset = model.all_states | set('*')
+    for k in range(1,n+1):
+        for u in fullset:
+            for v in fullset:
+                pimax = 0
+                tw = ''
+                for w in fullset:
+                    if str[k-1] in model.words:
+                        tmp = boost*pi[(k-1,w,u)]*model.ngram2[(w,u,v)]*model.emission[(str[k-1],v)]
+                    else:
+                        tmp = boost*pi[(k-1,w,u)]*model.ngram2[(w,u,v)]*model.emission[('_RARE_',v)]
+                    if tmp > pimax:
+                        pimax = tmp
+                        tw = w
+                pi[(k,u,v)] = pimax
+                bp[(k,u,v)] = tw
+    pimax = 0
+    for u in fullset:
+        for v in fullset:
+            tmp = pi[(n,u,v)]*model.ngram2[(u,v,'STOP')]
+            if tmp > pimax:
+                tu = u
+                tv = v
+                pimax = tmp
+
+    # back construction
+    state.append(tv)
+    state.append(tu)
+    for k in range(n-2,0,-1):
+        state.append(bp[(k+2,state[-1],state[-2])])
+        
+    #print 'max likelihood:',pimax/boost**n       
+    #print str
+    #print state[::-1]
+    return state[::-1]
+
+def viterbiClass(str,model):
+    ''' Viterbi Algorithm with Backpointer
+    '''
+    # initialize
+    boost = 5. # boost factor to avoid precision with tiny likelihood
+    n = len(str)
+    #print ' '.join(str)
+    pi = defaultdict(int)
+    bp = defaultdict(int)
+    pi[(0,'*','*')] = 1
+    state = []
+    # Algorithm
+    fullset = model.all_states | set('*')
+    for k in range(1,n+1):
+        for u in fullset:
+            for v in fullset:
+                pimax = 0
+                tw = ''
+                for w in fullset:
+                    if str[k-1] in model.words:
+                        tmp = boost*pi[(k-1,w,u)]*model.ngram2[(w,u,v)]*model.emission[(str[k-1],v)]
+                    else:
+                        if bool(re.search('[0-9]',str[k-1])):
+                             tmp = boost*pi[(k-1,w,u)]*model.ngram2[(w,u,v)]*model.emission[('_Numeric_',v)]
+                        else:
+                            if bool(re.match("^[a-zA-Z]*$",str[k-1])) and str[k-1].upper() == str[k-1]:
+                                tmp = boost*pi[(k-1,w,u)]*model.ngram2[(w,u,v)]*model.emission[('_AllCaptials_',v)]
+                            else:
+                                if bool(re.match("^[a-zA-Z]*$",w)) and w[-1].upper() == w[-1]:
+                                    tmp = boost*pi[(k-1,w,u)]*model.ngram2[(w,u,v)]*model.emission[('_LastCapital_',v)]
+                                else:
+                                    tmp = boost*pi[(k-1,w,u)]*model.ngram2[(w,u,v)]*model.emission[('_RARE_',v)]
+                    if tmp > pimax:
+                        pimax = tmp
+                        tw = w
+                pi[(k,u,v)] = pimax
+                bp[(k,u,v)] = tw
+    pimax = 0
+    for u in fullset:
+        for v in fullset:
+            tmp = pi[(n,u,v)]*model.ngram2[(u,v,'STOP')]
+            if tmp > pimax:
+                tu = u
+                tv = v
+                pimax = tmp
+
+    # back construction
+    state.append(tv)
+    state.append(tu)
+    for k in range(n-2,0,-1):
+        state.append(bp[(k+2,state[-1],state[-2])])
+        
+    #print 'max likelihood:',pimax/boost**n       
+    #print str
+    #print state[::-1]
+    return state[::-1]
 
 
 if __name__ == "__main__":
