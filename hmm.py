@@ -1,7 +1,7 @@
 #! /opt/local/bin/python
-
-__author__="Daniel Bauer <bauer@cs.columbia.edu>"
-__date__ ="$Sep 12, 2011"
+'''
+Based on the homework code by Daniel Bauer <bauer@cs.columbia.edu>
+'''
 
 import sys
 from collections import defaultdict
@@ -9,8 +9,8 @@ import math
 import re
 
 """
-Count n-gram frequencies in a data file and write counts to
-stdout. 
+Count n-gram frequencies in a data file and write counts to stdout.
+=====================================================================
 """
 
 def simple_conll_corpus_iterator(corpus_file):
@@ -74,66 +74,10 @@ def get_ngrams(sent_iterator, n):
          for n_gram in ngrams: #Return one n-gram at a time
             yield n_gram        
 
-def tagRare(corpus_file):
-    ''' tag rare word with count < 5
-        output to the *file*.rare
-
-    :param corpus_file: input file
-    '''
-    file = corpus_file.split('.')[0]+'.rare'
-    counts = defaultdict(int)
-    with open(corpus_file,'r') as f:
-        line_iterator = simple_conll_corpus_iterator(f)
-        for l in line_iterator:
-            counts[l[0]] += 1
-
-    with open(corpus_file,'r') as f:
-        line_iterator = simple_conll_corpus_iterator(f)
-        g = open(file,'w')
-        for w,t in line_iterator:
-            if (w,t) == (None,None):
-                g.write("\n")
-            else:
-                if counts[w] < 5:
-                    g.write('_RARE_ '+t+'\n')
-                else:
-                    g.write(w+' '+t+'\n')
-        g.close()
-    
-def tagClass(corpus_file):
-    ''' tag rare word with count < 5
-        output to the *file*.rare
-
-    :param corpus_file: input file
-    '''
-    file = corpus_file.split('.')[0]+'.rare2'
-    counts = defaultdict(int)
-    with open(corpus_file,'r') as f:
-        line_iterator = simple_conll_corpus_iterator(f)
-        for l in line_iterator:
-            counts[l[0]] += 1
-
-    with open(corpus_file,'r') as f:
-        line_iterator = simple_conll_corpus_iterator(f)
-        g = open(file,'w')
-        for w,t in line_iterator:
-            if (w,t) == (None,None):
-                g.write("\n")
-            else:
-                if counts[w] < 5:
-                    if bool(re.search('[0-9]',w)):
-                        g.write('_Numeric_ '+t+'\n')
-                    else:
-                        if bool(re.match("^[a-zA-Z]*$",w)) and w.upper() == w:
-                            g.write('_AllCaptials_ '+t+'\n')
-                        else:
-                            if bool(re.match("^[a-zA-Z]*$",w)) and w[-1].upper() == w[-1]:
-                                g.write('_LastCapital_ '+t+'\n')
-                            else:
-                                g.write('_RARE_ '+t+'\n')
-                else:
-                    g.write(w+' '+t+'\n')
-        g.close()
+'''
+Class for HMM
+=============
+'''
 
 class Hmm(object):
     """
@@ -226,13 +170,70 @@ class Hmm(object):
         with open(file,'r') as f:
             self.read_counts(f)
 
-def viterbi(str,model):
-    ''' Viterbi Algorithm with Backpointer
+'''
+Viterbi Algorithm
+==================
+'''
+def simpleRare(w):
     '''
+    return _RARE_ tag for any words input
+    '''
+    return '_RARE_'
+
+def rare4Class(w):
+    ''' return the rare class of given word w
+    '''
+    if bool(re.search('[0-9]',w)):
+        return '_Numeric_'
+    if bool(re.match("^[A-Z]*$",w)):
+        return '_AllCaptials_'
+    if bool(re.match("^[a-zA-Z]*$",w)) and w[-1].upper() == w[-1]:
+        return '_LastCapital_'
+    return '_RARE_'
+
+def tagRareClass(corpus_file,rareClass):
+    ''' tag rare word with count < 5
+        output to the *file*.rare
+
+    :param corpus_file: input file
+    :param rareClass: the choice of Rare class
+    '''
+    file = corpus_file.split('.')[0]+'.rare'
+    counts = defaultdict(int)
+    with open(corpus_file,'r') as f:
+        line_iterator = simple_conll_corpus_iterator(f)
+        for l in line_iterator:
+            counts[l[0]] += 1
+
+    with open(corpus_file,'r') as f:
+        line_iterator = simple_conll_corpus_iterator(f)
+        g = open(file,'w')
+        for w,t in line_iterator:
+            if (w,t) == (None,None):
+                g.write("\n")
+            else:
+                if counts[w] < 5:
+                    g.write(rareClass(w)+' '+t+'\n')
+                else:
+                    g.write(w+' '+t+'\n')
+        g.close()
+
+
+def viterbi(str,model,rareClass):
+    '''
+    .. function:: viterbi(str, model [, rareClass=simpleRare])
+
+    Viterbi Algorithm with Backpointer
+
+    :param str: sentence for phrase
+    :param model: language model from training set
+    :param rareClass: the choice of Rare class
+    :returns: states of the sentence
+    '''
+    
     # initialize
     boost = 4. # boost factor to avoid precision with tiny likelihood
     n = len(str)
-    #print ' '.join(str)
     pi = defaultdict(int)
     bp = defaultdict(int)
     pi[(0,'*','*')] = 1
@@ -248,7 +249,7 @@ def viterbi(str,model):
                     if str[k-1] in model.words:
                         tmp = boost*pi[(k-1,w,u)]*model.ngram2[(w,u,v)]*model.emission[(str[k-1],v)]
                     else:
-                        tmp = boost*pi[(k-1,w,u)]*model.ngram2[(w,u,v)]*model.emission[('_RARE_',v)]
+                        tmp = boost*pi[(k-1,w,u)]*model.ngram2[(w,u,v)]*model.emission[(rareClass(str[k-1]),v)]
                     if tmp > pimax:
                         pimax = tmp
                         tw = w
@@ -274,63 +275,28 @@ def viterbi(str,model):
     #print state[::-1]
     return state[::-1]
 
-def viterbiClass(str,model):
-    ''' Viterbi Algorithm with Backpointer
+def viterbiTagger(model,target_file,file,rareClass):
+    ''' Viterbi tagger program
+
+    :param train_file: training set processed by :func:`hmm.Hmm.write_counts`
+    :param target_file: file to tag
+    :param file: file to write the word-state pairs
+    :param rareClass: the choice of Rare class
     '''
-    # initialize
-    boost = 5. # boost factor to avoid precision with tiny likelihood
-    n = len(str)
-    #print ' '.join(str)
-    pi = defaultdict(int)
-    bp = defaultdict(int)
-    pi[(0,'*','*')] = 1
-    state = []
-    # Algorithm
-    fullset = model.all_states | set('*')
-    for k in range(1,n+1):
-        for u in fullset:
-            for v in fullset:
-                pimax = 0
-                tw = ''
-                for w in fullset:
-                    if str[k-1] in model.words:
-                        tmp = boost*pi[(k-1,w,u)]*model.ngram2[(w,u,v)]*model.emission[(str[k-1],v)]
-                    else:
-                        if bool(re.search('[0-9]',str[k-1])):
-                             tmp = boost*pi[(k-1,w,u)]*model.ngram2[(w,u,v)]*model.emission[('_Numeric_',v)]
-                        else:
-                            if bool(re.match("^[a-zA-Z]*$",str[k-1])) and str[k-1].upper() == str[k-1]:
-                                tmp = boost*pi[(k-1,w,u)]*model.ngram2[(w,u,v)]*model.emission[('_AllCaptials_',v)]
-                            else:
-                                if bool(re.match("^[a-zA-Z]*$",w)) and w[-1].upper() == w[-1]:
-                                    tmp = boost*pi[(k-1,w,u)]*model.ngram2[(w,u,v)]*model.emission[('_LastCapital_',v)]
-                                else:
-                                    tmp = boost*pi[(k-1,w,u)]*model.ngram2[(w,u,v)]*model.emission[('_RARE_',v)]
-                    if tmp > pimax:
-                        pimax = tmp
-                        tw = w
-                pi[(k,u,v)] = pimax
-                bp[(k,u,v)] = tw
-    pimax = 0
-    for u in fullset:
-        for v in fullset:
-            tmp = pi[(n,u,v)]*model.ngram2[(u,v,'STOP')]
-            if tmp > pimax:
-                tu = u
-                tv = v
-                pimax = tmp
-
-    # back construction
-    state.append(tv)
-    state.append(tu)
-    for k in range(n-2,0,-1):
-        state.append(bp[(k+2,state[-1],state[-2])])
-        
-    #print 'max likelihood:',pimax/boost**n       
-    #print str
-    #print state[::-1]
-    return state[::-1]
-
+    with open(target_file) as f:
+        sentence_iter = sentence_iterator(simple_conll_corpus_iterator(f))
+        g = open(file,'w')
+        for sentence in sentence_iter:
+            sent = ['*']+[word[1] for word in sentence]   # 1 is specified for this sentence iterator
+            state = viterbi(sent,model,rareClass)
+            #print ' '.join(sent)
+            #print ' '.join(state)
+            #print '************************'
+            n = len(sent)
+            for i in range(1,n):
+                g.write(sent[i]+' '+state[i]+'\n')
+            g.write('\n')
+        g.close()
 
 if __name__ == "__main__":
     print "HMM model file"

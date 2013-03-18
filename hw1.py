@@ -47,29 +47,6 @@ def unitagger(model,target_file):
                 g.write(w+' '+tag+'\n')
         g.close()
 
-def viterbiTagger(model,target_file,file):
-    ''' Viterbi tagger program
-
-    :param train_file: training set processed by :func:`hmm.Hmm.write_counts`
-    :param target_file: file to tag
-    '''
-    with open(target_file) as f:
-        sentence_iterator = hmm.sentence_iterator(hmm.simple_conll_corpus_iterator(f))
-        g = open(file,'w')
-        for sentence in sentence_iterator:
-            sent = ['*']+[word[1] for word in sentence]+['STOP']   # 1 is specified for this sentence iterator
-            #state = hmm.viterbiClass(sent,model)
-            state = hmm.viterbi(sent,model)
-            #print ' '.join(sent)
-            #print ' '.join(state)
-            #print '************************'
-            n = len(sent)
-            for i in range(1,n-1):
-                g.write(sent[i]+' '+state[i]+'\n')
-            g.write('\n')
-        g.close()
-            
-
 def hw1():
     model = hmm.Hmm(3)
     model.read_counts_from_file('gene.rare.counts') # python count_freqs.py gene.rare > gene.rare.counts
@@ -78,7 +55,7 @@ def hw1():
 
 
 def hw2():
-    hmm.tagRare('gene.train') # --> gene.rare
+    hmm.tagRareClass('gene.train',hmm.simpleRare) # --> gene.rare
     model = hmm.Hmm(3)
     with open('gene.rare','r') as f:
         model.train(f)
@@ -86,10 +63,10 @@ def hw2():
         model.write_counts(f)
     model.read_counts_from_file('gene.rare.counts') # python count_freqs.py gene.rare > gene.rare.counts
     model.processing()
-    viterbiTagger(model,'gene.dev','gene_dev.p2.out')
-
+    hmm.viterbiTagger(model,'gene.dev','gene_dev.p2.out',hmm.simpleRare)
+    
 def hw3():
-    hmm.tagClass('gene.train') # --> gene.rare2
+    hmm.tagRareClass('gene.train',hmm.rare4Class) # --> gene.rare2
     
     model = hmm.Hmm(3)
     with open('gene.rare2','r') as f:
@@ -98,10 +75,11 @@ def hw3():
         model.write_counts(f)
     model.read_counts_from_file('gene.rare2.counts') # python count_freqs.py gene.rare > gene.rare.counts
     model.processing()
-    viterbiTagger(model,'gene.test','gene_test.p3.out')
+    hmm.viterbiTagger(model,'gene.dev','gene_dev.p3.out',hmm.rare4Class)
     
 if __name__ == "__main__":
-    #qz6()
+    qz6()
+    hw1()
     hw2()
-    #hw3()
+    hw3()
 
