@@ -43,7 +43,6 @@ def wordToRare(tree,count):
         if count.words[tree[1]] < 5:
             tree[1] = '_RARE_'
 
-
 def convertRare(filename):
     pc = pCounters()
     for l in open(filename+'.counts.dat','r'):
@@ -72,21 +71,20 @@ def CKY(sentence,count):
         else: tword = '_RARE_'
         for symbol in count.nonterm:
             pi[(i,i,symbol)] = count.qunary[(symbol,tword)]
-            #if pi[(i,i,symbol)] != 0.:
-            #    print i,symbol,pi[(i,i,symbol)],tword
     # loop increasing length
     coef = 1.
     for l in range(1,n-1):
         for i in range(n-l):
             j = i+l
             for symbol in count.nonterm:
-                pimax = 0.
+                pimax = 0.0
                 for rule in count.symbinary[symbol]:
                     for s in range(i,j):
                         tpi = count.qbinary[(symbol,rule[0],rule[1])]*pi[(i,s,rule[0])]*pi[(s+1,j,rule[1])]
                         if tpi > pimax:
                             bp[(i,j,symbol)] = (rule[0],rule[1],s)
                             pi[(i,j,symbol)] = tpi*coef
+                            pimax = tpi
     # Last loop, search for 'SBARQ'
     i,j = 0, n-1
     symbol='SBARQ'
@@ -97,6 +95,7 @@ def CKY(sentence,count):
             if tpi > pimax:
                 bp[(i,j,symbol)] = (rule[0],rule[1],s)
                 pi[(i,j,symbol)] = tpi*coef
+                pimax = tpi
     
     print pi[(i,j,symbol)]
     return restructTree(bp,i,j,symbol,sentence)
@@ -119,11 +118,11 @@ def restructTree(bp,i,j,symbol,sentence):
         return [symbol,restructTree(bp,i,s,r1,sentence),restructTree(bp,s+1,j,r2,sentence)]
 
 if __name__ == "__main__":
-    convertRare('parse_train')
+    #convertRare('parse_train')
 
     # prepare model
     pc = pCounters()
-    for l in open('parse_train_r_count.dat','r'):
+    for l in open('parse_train_r.counts.dat','r'):
         pc.readin(l.split())
     pc.countWord()
     pc.countQ()
@@ -132,4 +131,5 @@ if __name__ == "__main__":
     with open('parse_dev_output.dat','w') as f:
         for l in open('parse_test.dat','r'):
             f.write(json.dumps(CKY(l.split(),pc))+'\n')
+
 
