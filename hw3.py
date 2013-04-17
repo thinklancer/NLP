@@ -84,7 +84,7 @@ def initialTforIBM1(lang1,lang2,n):
                 t[(word2,word1)] = c2[(word1,word2)]/c1[word1]
     return t
 
-def initialTforIBM2(lang1,lang2,n):
+def initialTforIBM2(lang1,lang2,n,t):
     '''
     initialize the transfer table for IBM 1 model
 
@@ -92,32 +92,36 @@ def initialTforIBM2(lang1,lang2,n):
     :param lang2: language 2
     :param n: number of sentence
     '''
-    ncount = defaultdict(int)
-    for k in range(n):
-        for word in lang1[k]:
-            ncount[word] += len(lang2[k])
 
-    t = defaultdict(float)
     q = defaultdict(float)
     c2 = defaultdict(float)
     c1 = defaultdict(float)
+    co2 = defaultdict(float)
+    co1 = defaultdict(float)
         
     for k in range(n):
         tempsum = 0.0
-        for word1 in lang1[k]:
-            tempsum += ncount[word1]
-        for j,word2 in enumerate(lang2[k]):
-            for i,word1 in enumerate(lang1[k]):
+        l = len(lang1[k])
+        m = len(lang2[k])
+        for i,word2 in enumerate(lang2[k]):
+            for j,word1 in enumerate(lang1[k]):
+                tempsum += t[(word2,word1)]
+            for j,word1 in enumerate(lang1[k]):
                 # loop over for assigning c corpus
-                c2[(word1,word2)] += ncount[word1]/tempsum
-                c1[word1] += ncount[word1]/tempsum
-                q[(j,i,len(lang1[k]),len(lang2[k]))]= c2[(word1,word2)]/c1[word1]
+                temp = t[(word2,word1)]/tempsum
+                c2[(word1,word2)] += temp
+                c1[word1] += temp
+                co2[(j,i,l,m)] += temp
+                co1[(i,l,m)] += temp
     # assignment of t
     # have duplicates but quick than compare full word list
     for k in range(n):
-        for word2 in lang2[k]:
-            for word1 in lang1[k]:    
+        l = len(lang1[k])
+        m = len(lang2[k])
+        for i,word2 in enumerate(lang2[k]):
+            for j,word1 in enumerate(lang1[k]):  
                 t[(word2,word1)] = c2[(word1,word2)]/c1[word1]
+                q[(j,i,l,m)] = co2[(j,i,l,m)]/co1[(i,l,m)]
     return t,q
 
 def updateTforIBM1(lang1,lang2,n,t):
@@ -158,23 +162,33 @@ def updateTforIBM2(lang1,lang2,n,t,q):
     '''
     c2 = defaultdict(float)
     c1 = defaultdict(float)
-        
+    co2 = defaultdict(float)
+    co1 = defaultdict(float)
+    
     for k in range(n):
-        for j,word2 in emumerate(lang2[k]):
+        for i,word2 in enumerate(lang2[k]):
             tempsum = 0.0
-            for i,word1 in enumerate(lang1[k]):
-                tempsum += t[(word2,word1)]*q[(j,i,len(lang1[k]),len(lang2[k]))]
-            for i,word1 in enumerate(lang1[k]):
+            l = len(lang1[k])
+            m = len(lang2[k])
+            for j,word1 in enumerate(lang1[k]):
+                tempsum += t[(word2,word1)]*q[(j,i,l,m)]
+            for j,word1 in enumerate(lang1[k]):
                 # loop over for assigning c corpus
-                c2[(word1,word2)] += t[(word2,word1)]*q[(j,i,len(lang1[k]),len(lang2[k]))]/tempsum
-                c1[word1] += t[(word2,word1)]*q[(j,i,len(lang1[k]),len(lang2[k]))]/tempsum
+                temp = t[(word2,word1)]*q[(j,i,l,m)]/tempsum
+                c2[(word1,word2)] += temp
+                c1[word1] += temp
+                co2[(j,i,l,m)] += temp
+                co1[(i,l,m)] += temp
     for k in range(n):
-        for word2 in lang2[k]:
-            for word1 in lang1[k]:    
+        l = len(lang1[k])
+        m = len(lang2[k])
+        for i,word2 in enumerate(lang2[k]):
+            for j,word1 in enumerate(lang1[k]):    
                 t[(word2,word1)] = c2[(word1,word2)]/c1[word1]
-    return t
+                q[(j,i,l,m)] = co2[(j,i,l,m)]/co1[(i,l,m)]
+    return t,q
 
-def findAlignment(t,lang1,lang2,n,filename):
+def findAlignment_IBM1(t,lang1,lang2,n,filename):
     ''' interpret the translation and assign translation pairs
 
     :param t: the previous transfer table
@@ -197,7 +211,34 @@ def findAlignment(t,lang1,lang2,n,filename):
                 if maxt != -1 and ai != -1:
                     f.write("{0} {1} {2}\n".format(k+1,ai+1,i+1))
 
-def ibm1(lang1,lang2,n):
+def findAlignment_IBM2(t,q,lang1,lang2,n,filename):
+    ''' interpret the translation and assign translation pairs
+
+    :param t: the transfer table
+    :param q: arrangement
+    :param lang1: language 1
+    :param lang2: language 2
+    :param n: number of sentence
+    :param filename: output filename
+    '''
+    with open(filename,'w') as f:
+        for k in range(n):
+            l = len(lang1[k])
+            m = len(lang2[k])
+            for i,word2 in enumerate(lang2[k]): # loop forign word
+                maxt = -1
+                for j,word1 in enumerate(lang1[k]):
+                    if q[j,i,l,m]*t[(word2,word1)] > maxt:
+                        maxt =  q[j,i,l,m]*t[(word2,word1)]
+                        if word1 == 'NULL':
+                            ai = -1
+                        else:
+                            ai = j
+                if maxt != -1 and ai != -1:
+                    f.write("{0} {1} {2}\n".format(k+1,ai+1,i+1))
+                    
+
+def ibm1(lang1,lang2,n,nloop=5):
     ''' train data by IBM 1 model
 
     :param lang1: language 1
@@ -205,15 +246,10 @@ def ibm1(lang1,lang2,n):
     :param n: number of sentence
     '''
     t = initialTforIBM1(lang1,lang2,n)
-    print "finish one loop"
-    updateTforIBM1(lang1,lang2,n,t)
-    print "finish one loop"
-    updateTforIBM1(lang1,lang2,n,t)
-    print "finish one loop"
-    updateTforIBM1(lang1,lang2,n,t)
-    print "finish one loop"
-    updateTforIBM1(lang1,lang2,n,t)
-    print "finish one loop"
+    print "finish initialization"
+    for i in range(nloop-1):
+        t=updateTforIBM1(lang1,lang2,n,t)
+        print "finish one loop"
     return t
 
 def ibm2(lang1,lang2,n,nloop=5):
@@ -223,12 +259,19 @@ def ibm2(lang1,lang2,n,nloop=5):
     :param lang2: language 2
     :param n: number of sentence
     '''
-    t = initialTforIBM2(lang1,lang2,n)
+    print " burn-in ibm 1 model"
+    t = initialTforIBM1(lang1,lang2,n)
     print "finish initialization"
     for i in range(nloop-1):
-        updateTforIBM1(lang1,lang2,n,t)
+        t=updateTforIBM1(lang1,lang2,n,t)
         print "finish one loop"
-    return t
+        
+    t,q = initialTforIBM2(lang1,lang2,n,t)
+    print "finish initialization"
+    for i in range(nloop-1):
+        t,q = updateTforIBM2(lang1,lang2,n,t,q)
+        print "finish one loop"
+    return t,q
 
 def assignment2():
     filename = 'corpus'
@@ -240,12 +283,13 @@ def assignment2():
         exit
 
     addNULL(eng,n)
-    t=ibm2(eng,esp,n)
+    t,q=ibm2(eng,esp,n)
 
-    filename = 'test'
+    filename = 'dev'
     lang1, n =  loadcorpus(filename+'.en')
     lang2, n =  loadcorpus(filename+'.es')
-    findAlignment(t,lang1,lang2,n,'test.key')
+    addNULL(lang1,n)
+    findAlignment_IBM2(t,q,lang1,lang2,n,'test.key')
     return 0
 
 def assignment1():
@@ -260,12 +304,12 @@ def assignment1():
     addNULL(eng,n)
     t=ibm1(eng,esp,n)
 
-    filename = 'test'
+    filename = 'dev'
     lang1, n =  loadcorpus(filename+'.en')
     lang2, n =  loadcorpus(filename+'.es')
     addNULL(lang1,n)
-    findAlignment(t,lang1,lang2,n,'test2.key')
+    findAlignment_IBM1(t,lang1,lang2,n,'test.key')
     return 0
 
 if __name__ ==  "__main__":
-    assignment1()
+    assignment2()
